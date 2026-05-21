@@ -21,15 +21,15 @@ return new class extends Migration
             $table->decimal('amount', 10, 2);
 
             $table->enum('method', [
-                'simulated',
-                'witness'
-            ])->default('simulated');
+                'simulado',
+                'tarjeta_credito',
+            ])->default('simulado');
 
             $table->enum('status', [
-                'completed',
-                'pending',
-                'failed'
-            ])->default('completed');
+                'completado',
+                'pendiente',
+                'fallido'
+            ])->default('completado');
 
             $table->string('reference')->nullable();
 

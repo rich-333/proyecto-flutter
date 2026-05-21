@@ -15,9 +15,8 @@ return new class extends Migration
             $table->id();
 
             $table->enum('role', [
-                'passenger',
-                'driver',
-                'admin'
+                'pasajero',
+                'conductor'
             ]);
 
             // DATOS GENERALES

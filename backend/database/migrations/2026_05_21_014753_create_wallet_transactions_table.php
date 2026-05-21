@@ -11,30 +11,26 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('documents', function (Blueprint $table) {
+        Schema::create('wallet_transactions', function (Blueprint $table) {
             $table->id();
 
             $table->foreignId('passenger_profile_id')
                 ->constrained('passenger_profiles')
                 ->cascadeOnDelete();
 
-            $table->enum('document_type', [
-                'carnet_universitario',
-                'carnet_de_discapacitado',
-                'carnet_de_identidad',
+            $table->enum('type', [
+                'recarga',
+                'pago_viaje',
+                'reembolso'
             ]);
 
-            $table->text('image_url');
+            $table->decimal('amount', 10, 2);
 
-            $table->enum('status', [
-                'pendiente',
-                'validado',
-                'rechazado'
-            ])->default('pendiente');
+            $table->decimal('balance_before', 10, 2);
 
-            $table->string('content_hash')->nullable();
+            $table->decimal('balance_after', 10, 2);
 
-            $table->text('rejection_comments')->nullable();
+            $table->text('description')->nullable();
 
             $table->timestamps();
         });
@@ -45,6 +41,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('documents');
+        Schema::dropIfExists('wallet_transactions');
     }
 };

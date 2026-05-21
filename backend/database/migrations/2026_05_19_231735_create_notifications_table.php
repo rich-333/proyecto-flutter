@@ -28,11 +28,11 @@ return new class extends Migration
             $table->boolean('read')->default(false);
 
             $table->enum('type', [
-                'payment',
-                'alert',
-                'system',
-                'verification'
-            ])->default('payment');
+                'pago',
+                'alerta',
+                'sistema',
+                'verificacion'
+            ])->default('pago');
 
             $table->timestamps();
         });

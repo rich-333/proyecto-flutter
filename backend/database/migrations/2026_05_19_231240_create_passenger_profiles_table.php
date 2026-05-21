@@ -19,10 +19,10 @@ return new class extends Migration
                 ->cascadeOnDelete();
 
             $table->enum('user_type', [
-                'school_student',
-                'university_student',
-                'senior_citizen',
-                'disability',
+                'estudiante_escolar',
+                'estudiante_universitario',
+                'adulto_mayor',
+                'discapacitado',
                 'general'
             ]);
 
@@ -30,10 +30,10 @@ return new class extends Migration
                 ->default(0);
 
             $table->enum('verification_status', [
-                'pending',
-                'verified',
-                'rejected'
-            ])->default('pending');
+                'pendiente',
+                'verificado',
+                'rechazado'
+            ])->default('pendiente');
 
             $table->date('birth_date')->nullable();
 

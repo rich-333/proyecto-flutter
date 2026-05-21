@@ -31,19 +31,19 @@ return new class extends Migration
             $table->decimal('amount_paid', 10, 2);
 
             $table->enum('user_type_at_time', [
-                'school_student',
-                'university_student',
-                'senior_citizen',
-                'disability',
+                'estudiante_escolar',
+                'estudiante_universitario',
+                'adulto_mayor',
+                'discapacitado',
                 'general'
             ]);
 
             $table->enum('payment_status', [
-                'completed',
-                'pending',
-                'failed',
-                'refunded'
-            ])->default('completed');
+                'completado',
+                'pendiente',
+                'fallido',
+                'reembolsado'
+            ])->default('completado');
 
             $table->string('qr_used')->nullable();
 

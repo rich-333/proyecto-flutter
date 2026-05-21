@@ -21,10 +21,10 @@ return new class extends Migration
             $table->string('fixed_qr')->unique();
 
             $table->enum('status', [
-                'active',
-                'maintenance',
-                'inactive'
-            ])->default('active');
+                'activo',
+                'mantenimiento',
+                'inactivo'
+            ])->default('activo');
 
             $table->integer('capacity')->default(20);
 

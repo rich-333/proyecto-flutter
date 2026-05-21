@@ -15,10 +15,10 @@ return new class extends Migration
             $table->id();
 
             $table->enum('user_type', [
-                'school_student',
-                'university_student',
-                'senior_citizen',
-                'disability',
+                'estudiante_escolar',
+                'estudiante_universitario',
+                'adulto_mayor',
+                'discapacitado',
                 'general'
             ]);
 
