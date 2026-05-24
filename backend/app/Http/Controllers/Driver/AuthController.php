@@ -10,65 +10,51 @@ use App\Models\User;
 
 class AuthController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function Login(Request $request) 
     {
-        $users = User::get();
+        $request->validate([
+            'driver_code' => 'required|string|size:8'
+        ]);
+
+        $user = User::where('driver_code', $request->driver_code)
+            ->whereHas('driverProfile')
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Código de chofer incorrecto o no autorizado.'
+            ], 401);
+        }
+
+        $driverProfile = $user->driverProfile;
+        $driverProfile->active_session = true;
+        $driverProfile->last_login = now();
+        $driverProfile->save();
+
+        $token = $user->createToken('driver_session_token')->plainTextToken;
 
         return response()->json([
             'status' => true,
-            'message' => 'Lista de usuarios obtenidad correctamente',
-            'data' => $users
+            'message' => 'Jornada iniciada correctamente',
+            'token' => $token,
+            'data' => $user->load('driverProfile')
         ], 200);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
+    public function logout(Request $request) {
+        $user = $request->user();
 
-    }
+        if($user->driverProfile) {
+            $user->driverProfile->active_session = false;
+            $user->driverProfile->save();
+        }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        //
-    }
+        $user->currentAccessToken()->delete();
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
+        return response()->json([
+            'status' => true,
+            'message' => 'Jornada finalizada y sesión cerrada correctamente.'
+        ], 200);
     }
 }
