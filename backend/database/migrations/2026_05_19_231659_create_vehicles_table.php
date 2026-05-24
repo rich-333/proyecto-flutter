@@ -14,9 +14,10 @@ return new class extends Migration
         Schema::create('vehicles', function (Blueprint $table) {
             $table->id('id');
 
-            $table->string('plate', 10)->unique();
+            $table->foreignId('route_id')
+                ->constrained('routes');
 
-            $table->string('route_name');
+            $table->string('plate', 10)->unique();
 
             $table->string('fixed_qr')->unique();
 

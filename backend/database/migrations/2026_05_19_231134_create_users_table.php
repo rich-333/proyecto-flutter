@@ -40,9 +40,6 @@ return new class extends Migration
                 ->nullable()
                 ->unique();
 
-            $table->string('pin')
-                ->nullable();
-
             $table->boolean('active')
                 ->default(true);
 

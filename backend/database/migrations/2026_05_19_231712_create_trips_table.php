@@ -22,12 +22,6 @@ return new class extends Migration
                 ->constrained('assignments')
                 ->cascadeOnDelete();
 
-            $table->foreignId('driver_profile_id')
-                ->constrained('driver_profiles');
-
-            $table->foreignId('vehicle_id')
-                ->constrained('vehicles');
-
             $table->decimal('amount_paid', 10, 2);
 
             $table->enum('user_type_at_time', [
@@ -46,10 +40,6 @@ return new class extends Migration
             ])->default('completado');
 
             $table->string('qr_used')->nullable();
-
-            $table->decimal('latitude', 10, 8)->nullable();
-
-            $table->decimal('longitude', 11, 8)->nullable();
 
             $table->timestamps();
         });
