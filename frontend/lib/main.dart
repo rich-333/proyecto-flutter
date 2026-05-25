@@ -36,7 +36,7 @@ class MyApp extends StatelessWidget {
         fontFamily: 'Inter',
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      initialRoute: '/',
+      initialRoute: '/chofer',
       // Envuelve TODA la app con el proveedor de tema del chofer
       builder: (context, child) {
         return ChoferThemeProvider(
