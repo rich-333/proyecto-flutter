@@ -21,4 +21,12 @@ class Assignment extends Model
     public function trip() {
         return $this->hasMany(Trip::class);
     }
+
+    public function driverProfile() {
+        return $this->belongsTo(DriverProfile::class);
+    }
+
+    public function vehicle() {
+        return $this->belongsTo(Vehicle::class);
+    }
 }

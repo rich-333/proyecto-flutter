@@ -13,4 +13,12 @@ class Route extends Model
         'direction',
         'active'
     ];
+
+    public function vehicle() {
+        return $this->hasMany(Vehicle::class);
+    }
+
+    public function line() {
+        return $this->belongsTo(Line::class);
+    }
 }

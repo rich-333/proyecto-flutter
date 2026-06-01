@@ -11,4 +11,8 @@ class Line extends Model
         'description',
         'active'
     ];
+
+    public function route() {
+        return $this->hasMany(Route::class);
+    }
 }

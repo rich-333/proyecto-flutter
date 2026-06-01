@@ -19,4 +19,8 @@ class Vehicle extends Model
     public function assignment() {
         return $this->hasMany(Assignment::class);
     }
+
+    public function route() {
+        return $this->belongsTo(Route::class);
+    }
 }
