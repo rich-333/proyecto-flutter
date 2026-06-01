@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'pago_exitoso_pasajero.dart';
+import '../../services/api_service.dart';
 
 class ConfirmarPagoPasajero extends StatefulWidget {
-  const ConfirmarPagoPasajero({super.key});
+  final String qrData;
+
+  const ConfirmarPagoPasajero({super.key, required this.qrData});
 
   @override
   State<ConfirmarPagoPasajero> createState() => _ConfirmarPagoPasajeroState();
@@ -12,11 +15,140 @@ class _ConfirmarPagoPasajeroState extends State<ConfirmarPagoPasajero>
     with SingleTickerProviderStateMixin {
   bool isProcessing = false;
   bool isPaid = false;
+  bool isLoading = true;
+  String? errorMessage;
+
+  // Data from API
+  String route = '';
+  String line = '';
+  String userType = '';
+  double fareApplied = 0.0;
+  double currentBalance = 0.0;
+  double remainingBalance = 0.0;
+  bool canPay = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPaymentPreview();
+  }
+
+  Future<void> _loadPaymentPreview() async {
+    try {
+      final response = await ApiService.previewPayment(widget.qrData);
+      
+      if (mounted) {
+        setState(() {
+          route = response['route'] ?? 'Ruta desconocida';
+          line = response['line'] ?? '';
+          userType = response['user_type'] ?? 'General';
+          fareApplied = (response['fare_applied'] ?? 0.0).toDouble();
+          currentBalance = (response['current_balance'] ?? 0.0).toDouble();
+          remainingBalance = (response['remaining_balance_after_payment'] ?? 0.0).toDouble();
+          canPay = response['can_pay'] ?? false;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          errorMessage = 'Error al cargar la información del pago: $e';
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _processPayment() async {
+    setState(() {
+      isProcessing = true;
+    });
+
+    try {
+      final response = await ApiService.payTrip(widget.qrData);
+      
+      if (mounted) {
+        setState(() {
+          isProcessing = false;
+          isPaid = true;
+        });
+
+        // Navegar a la pantalla de éxito del pago con los datos
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PagoExitosoPasajero(
+                  paidAmount: (response['paid_amount'] ?? 0.0).toDouble(),
+                  time: response['time'] ?? '--:--',
+                  date: response['date'] ?? '',
+                  route: response['route'] ?? 'Ruta desconocida',
+                ),
+              ),
+            );
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isProcessing = false;
+          errorMessage = 'Error al procesar el pago: $e';
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage ?? 'Error desconocido')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF4FBF4),
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFF10B981),
+          ),
+        ),
+      );
+    }
+
+    if (errorMessage != null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF4FBF4),
+        body: SafeArea(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                margin: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red),
+                ),
+                child: Text(
+                  errorMessage!,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Volver'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4FBF4), // surface
+      backgroundColor: const Color(0xFFF4FBF4), // background
       body: Stack(
         children: [
           // Contenido principal
@@ -108,10 +240,10 @@ class _ConfirmarPagoPasajeroState extends State<ConfirmarPagoPasajero>
                                   ),
                                 ),
                                 const SizedBox(height: 20),
-                                // Header Info
-                                const Text(
-                                  'Ruta 21',
-                                  style: TextStyle(
+                                // Header Info - Route and Line
+                                Text(
+                                  line,
+                                  style: const TextStyle(
                                     fontSize: 28,
                                     fontWeight: FontWeight.w700,
                                     color: Color(0xFF161D19),
@@ -119,9 +251,9 @@ class _ConfirmarPagoPasajeroState extends State<ConfirmarPagoPasajero>
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 4),
-                                const Text(
-                                  'Sindicato de Transportes Litoral',
-                                  style: TextStyle(
+                                Text(
+                                  route,
+                                  style: const TextStyle(
                                     fontSize: 16,
                                     color: Color(0xFF3C4A42),
                                   ),
@@ -143,7 +275,8 @@ class _ConfirmarPagoPasajeroState extends State<ConfirmarPagoPasajero>
                                     children: [
                                       // Category
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
                                         children: [
                                           const Text(
                                             'Categoría',
@@ -159,14 +292,18 @@ class _ConfirmarPagoPasajeroState extends State<ConfirmarPagoPasajero>
                                             ),
                                             decoration: BoxDecoration(
                                               color: const Color(0xFFDAE2FD), // secondary-container
-                                              borderRadius: BorderRadius.circular(9999),
+                                              borderRadius:
+                                                  BorderRadius.circular(9999),
                                               border: Border.all(
-                                                color: const Color(0xFF565E74).withOpacity(0.1),
+                                                color: const Color(0xFF565E74)
+                                                    .withOpacity(0.1),
                                               ),
                                             ),
-                                            child: const Text(
-                                              'General',
-                                              style: TextStyle(
+                                            child: Text(
+                                              userType
+                                                  .replaceAll('_', ' ')
+                                                  .toUpperCase(),
+                                              style: const TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w500,
                                                 letterSpacing: 0.5,
@@ -184,8 +321,10 @@ class _ConfirmarPagoPasajeroState extends State<ConfirmarPagoPasajero>
                                       const SizedBox(height: 16),
                                       // Amount
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        crossAxisAlignment: CrossAxisAlignment.center, // Cambiado para alinear al centro verticalmente
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
                                         children: [
                                           const Expanded(
                                             child: Text(
@@ -198,10 +337,10 @@ class _ConfirmarPagoPasajeroState extends State<ConfirmarPagoPasajero>
                                             ),
                                           ),
                                           const SizedBox(width: 8),
-                                          const Text(
-                                            'Bs 2.00',
-                                            style: TextStyle(
-                                              fontSize: 18, // Cambiado de 48 a 18 para igualar el tamaño
+                                          Text(
+                                            'Bs ${fareApplied.toStringAsFixed(2)}',
+                                            style: const TextStyle(
+                                              fontSize: 18,
                                               fontWeight: FontWeight.w700,
                                               letterSpacing: -0.02,
                                               color: Color(0xFF161D19),
@@ -221,35 +360,44 @@ class _ConfirmarPagoPasajeroState extends State<ConfirmarPagoPasajero>
                                     vertical: 8,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFEEF6EE), // surface-container-low
+                                    color: canPay
+                                        ? const Color(0xFFEEF6EE) // surface-container-low
+                                        : Colors.red.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Row(
                                         children: [
                                           Icon(
                                             Icons.account_balance_wallet,
-                                            color: Color(0xFF3C4A42),
+                                            color: canPay
+                                                ? const Color(0xFF3C4A42)
+                                                : Colors.red,
                                             size: 20,
                                           ),
-                                          SizedBox(width: 12),
+                                          const SizedBox(width: 12),
                                           Text(
                                             'Saldo restante',
                                             style: TextStyle(
                                               fontSize: 16,
-                                              color: Color(0xFF3C4A42),
+                                              color: canPay
+                                                  ? const Color(0xFF3C4A42)
+                                                  : Colors.red,
                                             ),
                                           ),
                                         ],
                                       ),
                                       Text(
-                                        'Bs 15.50',
+                                        'Bs ${remainingBalance.toStringAsFixed(2)}',
                                         style: TextStyle(
                                           fontSize: 20,
                                           fontWeight: FontWeight.w600,
-                                          color: Color(0xFF161D19),
+                                          color: canPay
+                                              ? const Color(0xFF161D19)
+                                              : Colors.red,
                                         ),
                                       ),
                                     ],
@@ -289,33 +437,13 @@ class _ConfirmarPagoPasajeroState extends State<ConfirmarPagoPasajero>
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: isProcessing
-                        ? null
-                        : () {
-                            setState(() {
-                              isProcessing = true;
-                            });
-
-                            // Simular procesamiento de pago
-                            Future.delayed(const Duration(seconds: 2), () {
-                                setState(() {
-                                    isProcessing = false;
-                                    isPaid = true;
-                                });
-
-                                // Navegar a la pantalla de éxito del pago
-                                Navigator.pushReplacement(
-                                    context,
-                                    MaterialPageRoute(
-                                    builder: (context) => const PagoExitosoPasajero(),
-                                    ),
-                                );
-                            });
-                          },
+                    onPressed: (isProcessing || !canPay) ? null : _processPayment,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: isPaid
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFF006C49),
+                      backgroundColor: !canPay
+                          ? Colors.grey
+                          : isPaid
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFF006C49),
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
@@ -359,20 +487,35 @@ class _ConfirmarPagoPasajeroState extends State<ConfirmarPagoPasajero>
                                   ),
                                 ],
                               )
-                            : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.contactless, size: 24),
-                                  SizedBox(width: 12),
-                                  Text(
-                                    'Pagar Bs 2.00',
-                                    style: TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                            : !canPay
+                                ? const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.warning, size: 24),
+                                      SizedBox(width: 12),
+                                      Text(
+                                        'Saldo insuficiente',
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.contactless, size: 24),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'Pagar Bs ${fareApplied.toStringAsFixed(2)}',
+                                        style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
                   ),
                 ),
               ),

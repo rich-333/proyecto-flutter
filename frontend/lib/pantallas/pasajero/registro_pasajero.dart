@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/api_service.dart';
 import 'verificacion_documento_pasajero.dart';
 
 class RegistroPasajero extends StatefulWidget {
@@ -10,7 +11,219 @@ class RegistroPasajero extends StatefulWidget {
 
 class _RegistroPasajeroState extends State<RegistroPasajero> {
   bool ocultarPassword = true;
-  String? tipoPasajero = 'General'; // General, Estudiante, Mayor
+  String? tipoPasajero = 'general';
+  bool isLoading = false;
+
+  // Controladores de texto
+  late TextEditingController fullNameController;
+  late TextEditingController ciController;
+  late TextEditingController phoneController;
+  late TextEditingController emailController;
+  late TextEditingController passwordController;
+  late TextEditingController birthDateController;
+
+  final Map<String, Map<String, String>> tiposUsuario = {
+    'general': {
+      'label': 'General',
+      'icon': 'person',
+    },
+    'estudiante_escolar': {
+      'label': 'Estudiante Escolar',
+      'icon': 'school',
+    },
+    'estudiante_universitario': {
+      'label': 'Estudiante Universitario',
+      'icon': 'school_outlined',
+    },
+    'adulto_mayor': {
+      'label': 'Adulto Mayor',
+      'icon': 'accessibility_new',
+    },
+    'discapacitado': {
+      'label': 'Discapacitado',
+      'icon': 'accessibility',
+    },
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    fullNameController = TextEditingController();
+    ciController = TextEditingController();
+    phoneController = TextEditingController();
+    emailController = TextEditingController();
+    passwordController = TextEditingController();
+    birthDateController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    fullNameController.dispose();
+    ciController.dispose();
+    phoneController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    birthDateController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectBirthDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2000),
+      firstDate: DateTime(1950),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        birthDateController.text = '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+      });
+    }
+  }
+
+  IconData _getIcon(String iconName) {
+    switch (iconName) {
+      case 'person':
+        return Icons.person;
+      case 'school':
+        return Icons.school;
+      case 'school_outlined':
+        return Icons.school_outlined;
+      case 'accessibility_new':
+        return Icons.accessibility_new;
+      case 'accessibility':
+        return Icons.accessibility;
+      default:
+        return Icons.person;
+    }
+  }
+
+  Future<void> _handleRegister() async {
+    // Validar campos
+    if (fullNameController.text.isEmpty ||
+        ciController.text.isEmpty ||
+        phoneController.text.isEmpty ||
+        emailController.text.isEmpty ||
+        passwordController.text.isEmpty ||
+        birthDateController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor completa todos los campos')),
+      );
+      return;
+    }
+
+    if (passwordController.text.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('La contraseña debe tener al menos 8 caracteres'),
+        ),
+      );
+      return;
+    }
+
+    // Normalize inputs
+    final fullName = fullNameController.text.trim();
+    final ci = ciController.text.trim();
+    final phone = phoneController.text.trim();
+    final email = emailController.text.trim();
+    final birthDate = birthDateController.text.trim();
+
+    // Validaciones adicionales
+    if (fullName.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El nombre debe tener al menos 2 caracteres')),
+      );
+      return;
+    }
+
+    // Cédula: alfanumérico mínimo 8 caracteres
+    if (!RegExp(r'^[A-Za-z0-9]{7,}$').hasMatch(ci)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La cédula debe tener al menos 7 caracteres alfanuméricos')),
+      );
+      return;
+    }
+
+    // Teléfono: solo dígitos y mínimo 8 caracteres
+      if (!RegExp(r'^\d{8,}$').hasMatch(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El teléfono debe contener solo números y tener al menos 8 dígitos')),
+      );
+      return;
+    }
+
+    // Email simple validation
+    if (!RegExp(r'^[\w\.\-]+@([\w\-]+\.)+[A-Za-z]{2,}$').hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa un correo electrónico válido')),
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      // Si es general, registrar directamente
+      if (tipoPasajero == 'general') {
+        final response = await ApiService.registerPassenger(
+          fullName: fullName,
+          ci: ci,
+          phone: phone,
+          email: email,
+          password: passwordController.text,
+          birthDate: birthDate,
+          userType: tipoPasajero!,
+        );
+
+        if (mounted) {
+          if (response['message'] != null) {
+            // Guardar token si viene en la respuesta
+            if (response['token'] != null) {
+              await ApiService.saveToken(response['token']);
+            }
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(response['message'])),
+            );
+            
+            Navigator.pushReplacementNamed(context, '/home');
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(response['error'] ?? 'Error al registrar')),
+            );
+          }
+        }
+      } else {
+        // Ir a verificación de documento
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => VerificacionDocumentoPasajero(
+                tipoUsuario: tipoPasajero!,
+                fullName: fullName,
+                ci: ci,
+                phone: phone,
+                email: email,
+                password: passwordController.text,
+                birthDate: birthDate,
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,34 +252,30 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                     end: Alignment.bottomRight,
                   ),
                 ),
-                child: Column(
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                          icon: const Icon(
-                            Icons.arrow_back,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const Expanded(
-                          child: Center(
-                            child: Text(
-                              'Emerald',
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF007A63),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 48),
-                      ],
+                    IconButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: Colors.black87,
+                      ),
                     ),
+                    const Expanded(
+                      child: Center(
+                        child: Text(
+                          'Emerald',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF007A63),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 48),
                   ],
                 ),
               ),
@@ -93,7 +302,6 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // TITULO
                         const Text(
                           'Crear cuenta',
                           style: TextStyle(
@@ -102,9 +310,7 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                             color: Colors.black,
                           ),
                         ),
-
                         const SizedBox(height: 6),
-
                         const Text(
                           'Únete a la nueva era del transporte.',
                           style: TextStyle(
@@ -112,7 +318,6 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                             color: Color(0xFF4A4A4A),
                           ),
                         ),
-
                         const SizedBox(height: 28),
 
                         // TIPO PASAJERO
@@ -123,77 +328,34 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-
                         const SizedBox(height: 14),
 
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _tipoCard(
-                                icono: Icons.person,
-                                texto: 'General',
-                                seleccionado: tipoPasajero == 'General',
-                                onTap: () {
-                                  setState(() {
-                                    tipoPasajero = 'General';
-                                  });
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _tipoCard(
-                                icono: Icons.school_outlined,
-                                texto: 'Estudiante',
-                                seleccionado: tipoPasajero == 'Estudiante',
-                                onTap: () {
-                                  setState(() {
-                                    tipoPasajero = 'Estudiante';
-                                  });
-                                  // Navegar a verificación de Estudiante
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const VerificacionDocumentoPasajero(
-                                        tipoUsuario: 'Estudiante',
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _tipoCard(
-                                icono: Icons.accessibility_new,
-                                texto: 'Mayor',
-                                seleccionado: tipoPasajero == 'Mayor',
-                                onTap: () {
-                                  setState(() {
-                                    tipoPasajero = 'Mayor';
-                                  });
-                                  // Navegar a verificación de Adulto Mayor
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const VerificacionDocumentoPasajero(
-                                        tipoUsuario: 'Mayor',
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: tiposUsuario.entries.map((entry) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 10),
+                                child: _tipoCard(
+                                  icono: _getIcon(entry.value['icon']!),
+                                  texto: entry.value['label']!,
+                                  seleccionado: tipoPasajero == entry.key,
+                                  onTap: () {
+                                    setState(() {
+                                      tipoPasajero = entry.key;
+                                    });
+                                  },
+                                ),
+                              );
+                            }).toList(),
+                          ),
                         ),
 
                         const SizedBox(height: 26),
-
                         Container(
                           height: 1,
                           color: const Color(0xFFE3E3E3),
                         ),
-
                         const SizedBox(height: 26),
 
                         // NOMBRE
@@ -204,13 +366,11 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                             color: Color(0xFF444444),
                           ),
                         ),
-
                         const SizedBox(height: 8),
-
                         _input(
                           hint: 'Ej. Juan Pérez',
+                          controller: fullNameController,
                         ),
-
                         const SizedBox(height: 18),
 
                         // FILA CI Y FECHA
@@ -218,11 +378,10 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                           children: [
                             Expanded(
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    'CI',
+                                    'Cédula de Identidad',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Color(0xFF444444),
@@ -230,7 +389,8 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                                   ),
                                   const SizedBox(height: 8),
                                   _input(
-                                    hint: 'Número',
+                                    hint: 'Ej. 12345678',
+                                    controller: ciController,
                                   ),
                                 ],
                               ),
@@ -238,27 +398,62 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    'Fecha de nac.',
+                                    'Fecha de nacimiento',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Color(0xFF444444),
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  _input(
-                                    hint: 'dd/mm/aaaa',
-                                    icono: Icons.calendar_today_outlined,
+                                  GestureDetector(
+                                    onTap: _selectBirthDate,
+                                    child: Container(
+                                      height: 60,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF3EF),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: const Color(0xFFD9E3DB),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 16,
+                                              ),
+                                              child: Text(
+                                                birthDateController.text.isEmpty
+                                                    ? 'Seleccionar'
+                                                    : birthDateController.text,
+                                                style: const TextStyle(
+                                                  color: Color(0xFF7A7A7A),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const Padding(
+                                            padding: EdgeInsets.only(right: 16),
+                                            child: Icon(
+                                              Icons.calendar_today,
+                                              size: 20,
+                                              color: Colors.black54,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 18),
 
                         // TELEFONO
@@ -269,13 +464,11 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                             color: Color(0xFF444444),
                           ),
                         ),
-
                         const SizedBox(height: 8),
-
                         _input(
                           hint: '+591 00000000',
+                          controller: phoneController,
                         ),
-
                         const SizedBox(height: 18),
 
                         // CORREO
@@ -286,13 +479,11 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                             color: Color(0xFF444444),
                           ),
                         ),
-
                         const SizedBox(height: 8),
-
                         _input(
                           hint: 'correo@ejemplo.com',
+                          controller: emailController,
                         ),
-
                         const SizedBox(height: 18),
 
                         // PASSWORD
@@ -303,9 +494,7 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                             color: Color(0xFF444444),
                           ),
                         ),
-
                         const SizedBox(height: 8),
-
                         Container(
                           height: 60,
                           decoration: BoxDecoration(
@@ -316,11 +505,11 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                             ),
                           ),
                           child: TextField(
+                            controller: passwordController,
                             obscureText: ocultarPassword,
                             decoration: InputDecoration(
                               border: InputBorder.none,
-                              contentPadding:
-                                  const EdgeInsets.symmetric(
+                              contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 18,
                               ),
@@ -329,23 +518,21 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                                 letterSpacing: 3,
                               ),
                               suffixIcon: IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    ocultarPassword =
-                                        !ocultarPassword;
-                                  });
-                                },
                                 icon: Icon(
                                   ocultarPassword
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
-                                  color: const Color(0xFF444444),
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: Colors.black54,
                                 ),
+                                onPressed: () {
+                                  setState(() {
+                                    ocultarPassword = !ocultarPassword;
+                                  });
+                                },
                               ),
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 34),
 
                         // BOTON
@@ -353,41 +540,35 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                           width: double.infinity,
                           height: 58,
                           child: ElevatedButton(
-                            onPressed: () {
-                              // Si es General, ir al Home directamente
-                              if (tipoPasajero == 'General') {
-                                Navigator.pushReplacementNamed(context, '/home');
-                              } else {
-                                // Para Estudiante o Mayor, ya navegamos al hacer tap en el tipo
-                                // Aquí solo mostramos un mensaje
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Completa la verificación'),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
-                              }
-                            },
+                            onPressed: isLoading ? null : _handleRegister,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  const Color(0xFF007A4D),
+                              backgroundColor: const Color(0xFF007A4D),
                               elevation: 0,
                               shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(12),
                               ),
+                              disabledBackgroundColor:
+                                  const Color(0xFF007A4D).withOpacity(0.5),
                             ),
-                            child: const Text(
-                              'Crear cuenta',
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
+                            child: isLoading
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Crear cuenta',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                           ),
                         ),
-
                         const SizedBox(height: 22),
 
                         // INICIAR SESION
@@ -398,22 +579,18 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
                             },
                             child: RichText(
                               text: const TextSpan(
+                                text: '¿Ya tienes cuenta? ',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF4A4A4A),
+                                ),
                                 children: [
-                                  TextSpan(
-                                    text:
-                                        '¿Ya tienes cuenta? ',
-                                    style: TextStyle(
-                                      color: Colors.black87,
-                                      fontSize: 16,
-                                    ),
-                                  ),
                                   TextSpan(
                                     text: 'Inicia sesión',
                                     style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
                                       color: Color(0xFF007A63),
-                                      fontWeight:
-                                          FontWeight.bold,
-                                      fontSize: 16,
                                     ),
                                   ),
                                 ],
@@ -435,6 +612,7 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
 
   Widget _input({
     required String hint,
+    TextEditingController? controller,
     IconData? icono,
   }) {
     return Container(
@@ -447,6 +625,7 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
         ),
       ),
       child: TextField(
+        controller: controller,
         decoration: InputDecoration(
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
@@ -478,6 +657,7 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        width: 90,
         height: 82,
         decoration: BoxDecoration(
           color: seleccionado
@@ -500,11 +680,16 @@ class _RegistroPasajeroState extends State<RegistroPasajero> {
               size: 24,
             ),
             const SizedBox(height: 6),
-            Text(
-              texto,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF2B2B2B),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                texto,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Color(0xFF2B2B2B),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],

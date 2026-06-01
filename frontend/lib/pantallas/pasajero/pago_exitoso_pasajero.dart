@@ -1,7 +1,20 @@
 import 'package:flutter/material.dart';
 
 class PagoExitosoPasajero extends StatefulWidget {
-  const PagoExitosoPasajero({super.key});
+  final double paidAmount;
+  final String time;
+  final String date;
+  final String route;
+  final String? transactionCode;
+
+  const PagoExitosoPasajero({
+    super.key,
+    required this.paidAmount,
+    required this.time,
+    required this.date,
+    required this.route,
+    this.transactionCode,
+  });
 
   @override
   State<PagoExitosoPasajero> createState() => _PagoExitosoPasajeroState();
@@ -16,9 +29,11 @@ class _PagoExitosoPasajeroState extends State<PagoExitosoPasajero> {
 
   @override
   Widget build(BuildContext context) {
-    // Obtener la hora actual
-    final now = DateTime.now();
-    final timeString = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'p. m.' : 'a. m.'}";
+    // Generar código de transacción si no se proporciona
+    final transactionCode = widget.transactionCode ?? 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
+    
+    // Formatear la hora de manera más clara
+    final timeFormatted = widget.time;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4FBF4), // surface
@@ -78,9 +93,9 @@ class _PagoExitosoPasajeroState extends State<PagoExitosoPasajero> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Bs 2.00',
-                    style: TextStyle(
+                  Text(
+                    'Bs ${widget.paidAmount.toStringAsFixed(2)}',
+                    style: const TextStyle(
                       fontSize: 48,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.02,
@@ -126,7 +141,7 @@ class _PagoExitosoPasajeroState extends State<PagoExitosoPasajero> {
                             ],
                           ),
                           Text(
-                            timeString,
+                            timeFormatted,
                             style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w600,
@@ -171,13 +186,15 @@ class _PagoExitosoPasajeroState extends State<PagoExitosoPasajero> {
                               color: const Color(0xFFDDE4DD), // surface-variant
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Text(
-                              'Ruta 21',
-                              style: TextStyle(
-                                fontSize: 20,
+                            child: Text(
+                              widget.route,
+                              style: const TextStyle(
+                                fontSize: 16,
                                 fontWeight: FontWeight.w600,
                                 color: Color(0xFF161D19),
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -209,10 +226,10 @@ class _PagoExitosoPasajeroState extends State<PagoExitosoPasajero> {
                               ),
                             ],
                           ),
-                          const Text(
-                            'TX-9842A',
-                            style: TextStyle(
-                              fontSize: 20,
+                          Text(
+                            transactionCode,
+                            style: const TextStyle(
+                              fontSize: 16,
                               fontWeight: FontWeight.w600,
                               color: Color(0xFF161D19),
                               letterSpacing: 1,

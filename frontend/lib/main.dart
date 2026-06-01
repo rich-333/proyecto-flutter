@@ -52,10 +52,34 @@ class MyApp extends StatelessWidget {
         '/historial': (context) => const HistorialPasajero(),
         '/perfil': (context) => const PerfilPasajero(),
         '/scan': (context) => const ScanQrPasajero(),
-        '/confirmar-pago': (context) => const ConfirmarPagoPasajero(),
-        '/pago-exitoso': (context) => const PagoExitosoPasajero(),
-        '/verificacion': (context) =>
-            const VerificacionDocumentoPasajero(tipoUsuario: 'Estudiante'),
+        '/confirmar-pago': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ?? {};
+          return ConfirmarPagoPasajero(
+            qrData: args['qrData'] as String? ?? '',
+          );
+        },
+        '/pago-exitoso': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ?? {};
+          return PagoExitosoPasajero(
+            paidAmount: (args['paidAmount'] as double?) ?? 0.0,
+            time: args['time'] as String? ?? '',
+            date: args['date'] as String? ?? '',
+            route: args['route'] as String? ?? '',
+            transactionCode: args['transactionCode'] as String?,
+          );
+        },
+        '/verificacion': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ?? {};
+          return VerificacionDocumentoPasajero(
+            tipoUsuario: args['tipoUsuario'] as String? ?? 'Estudiante',
+            fullName: args['fullName'] as String? ?? '',
+            ci: args['ci'] as String? ?? '',
+            phone: args['phone'] as String? ?? '',
+            email: args['email'] as String? ?? '',
+            password: args['password'] as String? ?? '',
+            birthDate: args['birthDate'] as String? ?? '',
+          );
+        },
 
         // ── Chofer ────────────────────────────────────────────────────────────
         '/chofer': (context) => const LoginChofer(),

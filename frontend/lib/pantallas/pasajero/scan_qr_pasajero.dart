@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'confirmar_pago_pasajero.dart';
 
 class ScanQrPasajero extends StatefulWidget {
@@ -12,6 +13,9 @@ class _ScanQrPasajeroState extends State<ScanQrPasajero>
     with SingleTickerProviderStateMixin {
   bool flashOn = false;
   late AnimationController _scanController;
+  
+  // QR Data simulado (en producción, esto vendría del escaneo real)
+  final String qrData = jsonEncode({'assignment_id': 1});
 
   @override
   void initState() {
@@ -293,7 +297,7 @@ class _ScanQrPasajeroState extends State<ScanQrPasajero>
                                 Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                        builder: (context) => const ConfirmarPagoPasajero(),
+                                        builder: (context) => ConfirmarPagoPasajero(qrData: qrData),
                                     ),
                                 );
                             },

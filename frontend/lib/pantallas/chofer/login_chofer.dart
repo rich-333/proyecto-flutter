@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../services/api_service.dart';
 import 'chofer_theme.dart';
 import 'dashboard_chofer.dart';
 
@@ -13,7 +14,7 @@ class LoginChofer extends StatefulWidget {
 
 class _LoginChoferState extends State<LoginChofer>
     with TickerProviderStateMixin {
-  static const int _pinLen = 5;
+  static const int _pinLen = 8;
   String _pin = '';
   bool _hasError = false;
   bool _isLoading = false;
@@ -108,23 +109,35 @@ class _LoginChoferState extends State<LoginChofer>
     _btnCtrl.stop();
     await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
-    if (_pin == '12345') {
-      Navigator.pushReplacementNamed(context, '/chofer/dashboard');
-    } else {
-      setState(() {
-        _hasError = true;
-        _isLoading = false;
-      });
-      HapticFeedback.vibrate();
-      _shakeCtrl.forward(from: 0);
-      await Future.delayed(const Duration(milliseconds: 1500));
-      if (mounted) {
-        setState(() {
-          _pin = '';
-          _hasError = false;
-        });
-        for (final c in _dotCtrl) c.reverse();
+
+    try {
+      final response = await ApiService.loginDriver(_pin);
+      if (response['status'] == true) {
+        await ApiService.saveToken(response['token']);
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/chofer/dashboard');
+      } else {
+        _handleLoginError();
       }
+    } catch (e) {
+      _handleLoginError();
+    }
+  }
+
+  void _handleLoginError() async {
+    setState(() {
+      _hasError = true;
+      _isLoading = false;
+    });
+    HapticFeedback.vibrate();
+    _shakeCtrl.forward(from: 0);
+    await Future.delayed(const Duration(milliseconds: 1500));
+    if (mounted) {
+      setState(() {
+        _pin = '';
+        _hasError = false;
+      });
+      for (final c in _dotCtrl) c.reverse();
     }
   }
 
@@ -318,37 +331,34 @@ class _LoginChoferState extends State<LoginChofer>
               ),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: List.generate(_pinLen, (i) {
                 final filled = i < _pin.length;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: ScaleTransition(
-                    scale: _dotAnim[i],
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _hasError
-                            ? t.errorRed
-                            : filled
-                            ? t.dotFilled
-                            : t.dotEmpty,
-                        boxShadow: filled && !_hasError
-                            ? [
-                                BoxShadow(
-                                  color: t.dotFilled.withValues(alpha: 0.4),
-                                  blurRadius: 8,
-                                ),
-                              ]
-                            : null,
-                      ),
+                return ScaleTransition(
+                  scale: _dotAnim[i],
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _hasError
+                          ? t.errorRed
+                          : filled
+                              ? t.dotFilled
+                              : t.dotEmpty,
+                      boxShadow: filled && !_hasError
+                          ? [
+                              BoxShadow(
+                                color: t.dotFilled.withValues(alpha: 0.4),
+                                blurRadius: 8,
+                              ),
+                            ]
+                          : null,
                     ),
                   ),
                 );
-              }),
+              }).toList(),
             ),
           ),
           if (_hasError) ...[

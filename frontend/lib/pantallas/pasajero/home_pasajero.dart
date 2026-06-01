@@ -2,9 +2,68 @@ import 'package:flutter/material.dart';
 import 'historial_pasajero.dart';
 import 'perfil_pasajero.dart';
 import 'scan_qr_pasajero.dart'; 
+import '../../services/api_service.dart';
 
-class HomePasajero extends StatelessWidget {
+class HomePasajero extends StatefulWidget {
   const HomePasajero({super.key});
+
+  @override
+  State<HomePasajero> createState() => _HomePasajeroState();  
+}
+
+class _HomePasajeroState extends State<HomePasajero> {
+  bool _isLoadingBalance = true;
+  bool _isLoadingRecentActivity = true;
+  double _balance = 0.0;
+  List<dynamic> _recentActivity = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBalance();
+    _loadRecentActivity();
+  }
+
+  Future<void> _loadBalance() async {
+    try {
+      final passengerBalance = await ApiService.getPassengerBalance();
+
+      if(mounted) {
+        setState(() {
+          _balance = double.parse((passengerBalance['data'] ?? 0).toString());
+          _isLoadingBalance = false;
+        });
+      }
+    }
+    catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingBalance = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadRecentActivity() async {
+    try {
+      final passengerRecentActivity = await ApiService.getPassengerRecentActivity();
+
+      if (mounted) {
+        setState(() {
+          _recentActivity = passengerRecentActivity['data'] ?? [];
+          _isLoadingRecentActivity = false;
+        });
+      }
+    }
+    catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingRecentActivity = false;
+        });
+      }
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -160,8 +219,8 @@ class HomePasajero extends StatelessWidget {
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    const Text(
-                                      '45.50',
+                                    Text(
+                                      _isLoadingBalance ? '...' : _balance.toStringAsFixed(2),
                                       style: TextStyle(
                                         fontSize: 48,
                                         fontWeight: FontWeight.w700,
@@ -282,7 +341,14 @@ class HomePasajero extends StatelessWidget {
                               ),
                             ),
                             TextButton(
-                              onPressed: () {},
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const HistorialPasajero(),
+                                  ),
+                                );
+                              },
                               style: TextButton.styleFrom(
                                 padding: EdgeInsets.zero,
                               ),
@@ -299,35 +365,59 @@ class HomePasajero extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        // Trip Item 1
-                        _buildTripItem(
-                          icon: Icons.directions_bus,
-                          title: 'Ruta 21',
-                          subtitle: 'Hoy, 08:30 AM',
-                          amount: '- Bs 2.00',
-                          tag: 'General',
-                          isTopUp: false,
-                        ),
-                        const SizedBox(height: 12),
-                        // Trip Item 2
-                        _buildTripItem(
-                          icon: Icons.directions_bus,
-                          title: 'Ruta 42',
-                          subtitle: 'Ayer, 18:15 PM',
-                          amount: '- Bs 2.00',
-                          tag: 'General',
-                          isTopUp: false,
-                        ),
-                        const SizedBox(height: 12),
-                        // Trip Item 3 (Top up)
-                        _buildTripItem(
-                          icon: Icons.account_balance_wallet,
-                          title: 'Recarga',
-                          subtitle: '12 Oct, 10:00 AM',
-                          amount: '+ Bs 50.00',
-                          tag: '',
-                          isTopUp: true,
-                        ),
+                        if (_isLoadingRecentActivity)
+                          const Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF10B981),
+                            ),
+                          )
+                        else if (_recentActivity.isEmpty)
+                          const Center(
+                            child: Text(
+                              'Sin actividad reciente',
+                              style: TextStyle(
+                                color: Color(0xFF3C4A42),
+                                fontSize: 14,
+                              ),
+                            ),
+                          )
+                        else
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _recentActivity.length,
+                            itemBuilder: (context, index) {
+                              final activity = _recentActivity[index];
+                              final isTopUp = activity['type'] == 'recarga';
+                              
+                              return Column(
+                                children: [
+                                  _buildTripItem(
+                                    icon: isTopUp
+                                        ? Icons.account_balance_wallet
+                                        : Icons.directions_bus,
+                                    title: isTopUp
+                                        ? 'Recarga'
+                                        : activity['line'] ?? 'Viaje',
+                                    route:
+                                      '${activity['route']}',
+                                    subtitle:
+                                        '${activity['date']}, ${activity['time']}',
+                                    amount: isTopUp
+                                        ? '+ Bs ${activity['amount'].toStringAsFixed(2)}'
+                                        : '- Bs ${activity['amount'].abs().toStringAsFixed(2)}',
+                                    tag: isTopUp
+                                        ? ''
+                                        : (activity['user_type'] ?? 'General')
+                                            .replaceAll('_', ' '),
+                                    isTopUp: isTopUp,
+                                  ),
+                                  if (index < _recentActivity.length - 1)
+                                    const SizedBox(height: 12),
+                                ],
+                              );
+                            },
+                          ),
                       ],
                     ),
                     const SizedBox(height: 100),
@@ -400,6 +490,7 @@ class HomePasajero extends StatelessWidget {
   Widget _buildTripItem({
     required IconData icon,
     required String title,
+    required String route,
     required String subtitle,
     required String amount,
     required String tag,
@@ -449,6 +540,14 @@ class HomePasajero extends StatelessWidget {
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF161D19),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    route,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF3C4A42),
                     ),
                   ),
                   const SizedBox(height: 4),

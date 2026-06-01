@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'registro_pasajero.dart'; // <-- AGREGAR ESTA LÍNEA
+import '../../services/api_service.dart';
+import 'registro_pasajero.dart' as registro; // alias para evitar conflictos con widgets
 import 'home_pasajero.dart';
 
 class LoginPasajero extends StatefulWidget {
@@ -10,7 +11,51 @@ class LoginPasajero extends StatefulWidget {
 }
 
 class _LoginPasajeroState extends State<LoginPasajero> {
+  final TextEditingController _emailCtrl = TextEditingController();
+  final TextEditingController _passCtrl = TextEditingController();
   bool ocultarPin = true;
+  bool isLoading = false;
+
+  void _login() async {
+    if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, ingresa tu correo y contraseña')),
+      );
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final res = await ApiService.loginPassenger(_emailCtrl.text.trim(), _passCtrl.text);
+
+      if (res['status'] == true) {
+        await ApiService.saveToken(res['token']);
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePasajero()),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'] ?? 'Error al iniciar sesión')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error de conexión o servidor')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +112,7 @@ class _LoginPasajeroState extends State<LoginPasajero> {
                 const Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'NÚMERO DE CELULAR',
+                    'CORREO ELECTRÓNICO',
                     style: TextStyle(
                       fontSize: 11,
                       letterSpacing: 1,
@@ -89,16 +134,17 @@ class _LoginPasajeroState extends State<LoginPasajero> {
                     ),
                   ),
                   child: TextField(
-                    decoration: InputDecoration(
+                    controller: _emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
                       border: InputBorder.none,
-                      contentPadding:
-                          const EdgeInsets.symmetric(vertical: 20),
-                      prefixIcon: const Icon(
-                        Icons.smartphone,
+                      contentPadding: EdgeInsets.symmetric(vertical: 20),
+                      prefixIcon: Icon(
+                        Icons.email_outlined,
                         color: Color(0xFF5B5B5B),
                       ),
-                      hintText: 'Ej. 71234567',
-                      hintStyle: const TextStyle(
+                      hintText: 'Ej. juan@correo.com',
+                      hintStyle: TextStyle(
                         color: Color(0xFF8C8C8C),
                       ),
                     ),
@@ -112,7 +158,7 @@ class _LoginPasajeroState extends State<LoginPasajero> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'PIN (4 DÍGITOS)',
+                      'CONTRASEÑA',
                       style: TextStyle(
                         fontSize: 11,
                         letterSpacing: 1,
@@ -123,7 +169,7 @@ class _LoginPasajeroState extends State<LoginPasajero> {
                     GestureDetector(
                       onTap: () {},
                       child: const Text(
-                        '¿Olvidaste tu PIN?',
+                        '¿Olvidaste tu contraseña?',
                         style: TextStyle(
                           fontSize: 12,
                           color: Color(0xFF007A63),
@@ -146,8 +192,8 @@ class _LoginPasajeroState extends State<LoginPasajero> {
                     ),
                   ),
                   child: TextField(
+                    controller: _passCtrl,
                     obscureText: ocultarPin,
-                    keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                       border: InputBorder.none,
                       contentPadding:
@@ -156,7 +202,7 @@ class _LoginPasajeroState extends State<LoginPasajero> {
                         Icons.lock_outline,
                         color: Color(0xFF5B5B5B),
                       ),
-                      hintText: '••••',
+                      hintText: '••••••••',
                       hintStyle: const TextStyle(
                         letterSpacing: 5,
                         color: Color(0xFF6B6B6B),
@@ -185,15 +231,7 @@ class _LoginPasajeroState extends State<LoginPasajero> {
                   width: double.infinity,
                   height: 58,
                   child: ElevatedButton(
-                    onPressed: () { 
-                        // Navegar al home del pasajero
-                        Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => const HomePasajero(),
-                            ),
-                        );
-                    },
+                    onPressed: isLoading ? null : _login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF16C784),
                       elevation: 0,
@@ -201,25 +239,27 @@ class _LoginPasajeroState extends State<LoginPasajero> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Iniciar sesión',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black,
+                    child: isLoading 
+                        ? const CircularProgressIndicator(color: Colors.black)
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Iniciar sesión',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Icon(
+                                Icons.arrow_forward,
+                                color: Colors.black,
+                                size: 22,
+                              ),
+                            ],
                           ),
-                        ),
-                        SizedBox(width: 8),
-                        Icon(
-                          Icons.arrow_forward,
-                          color: Colors.black,
-                          size: 22,
-                        ),
-                      ],
-                    ),
                   ),
                 ),
 
@@ -301,11 +341,11 @@ class _LoginPasajeroState extends State<LoginPasajero> {
                     GestureDetector(
                       onTap: () {
                         Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => const RegistroPasajero(),
-                                ),
-                            );
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const registro.RegistroPasajero(),
+                            ),
+                          );
                         },
                       child: const Text(
                         'Registrarse',

@@ -1,71 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../services/api_service.dart';
 import 'chofer_theme.dart';
 import 'notificacion_pago_chofer.dart';
 
 // ── Modelos ────────────────────────────────────────────────────────────────────
-class _Pago {
-  final String label, time, lugar, monto, tag;
-  final IconData icon;
-  final Color color;
-  const _Pago({
-    required this.label,
-    required this.time,
-    required this.lugar,
-    required this.monto,
-    required this.icon,
-    required this.color,
-    required this.tag,
-  });
-}
-
-const _pagos = [
-  _Pago(
-    label: 'Pago QR #8492',
-    time: 'Hace 2 min',
-    lugar: 'Asiento 4',
-    monto: '+ Bs 2.00',
-    icon: Icons.qr_code_scanner,
-    color: Color(0xFF10B981),
-    tag: 'General',
-  ),
-  _Pago(
-    label: 'Tarjeta NFC',
-    time: 'Hace 5 min',
-    lugar: 'Asiento 12',
-    monto: '+ Bs 1.50',
-    icon: Icons.contactless,
-    color: Color(0xFF3B82F6),
-    tag: 'Estudiante',
-  ),
-  _Pago(
-    label: 'Pago QR #8490',
-    time: 'Hace 12 min',
-    lugar: 'Pie',
-    monto: '+ Bs 2.00',
-    icon: Icons.qr_code_scanner,
-    color: Color(0xFF10B981),
-    tag: 'General',
-  ),
-  _Pago(
-    label: 'Tercera Edad',
-    time: 'Hace 18 min',
-    lugar: 'Asiento 2',
-    monto: '+ Bs 1.50',
-    icon: Icons.elderly,
-    color: Color(0xFFF59E0B),
-    tag: 'Senior',
-  ),
-  _Pago(
-    label: 'Pago QR #8487',
-    time: 'Hace 25 min',
-    lugar: 'Pie',
-    monto: '+ Bs 2.00',
-    icon: Icons.qr_code_scanner,
-    color: Color(0xFF10B981),
-    tag: 'General',
-  ),
-];
+// Removidos por el modelo dinamico del backend
 
 // ── Widget Principal ───────────────────────────────────────────────────────────
 class DashboardChofer extends StatefulWidget {
@@ -79,6 +20,13 @@ class _DashboardChoferState extends State<DashboardChofer>
   int _navIdx = 0;
   late AnimationController _pingCtrl;
 
+  List<dynamic> _recentPayments = [];
+  bool _isLoadingPayments = true;
+  Timer? _notificationTimer;
+  int _dailyPassengers = 0;
+  double _dailyCollected = 0.0;
+  String? _dailyStatsError;
+
   @override
   void initState() {
     super.initState();
@@ -89,11 +37,81 @@ class _DashboardChoferState extends State<DashboardChofer>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat();
+    _loadRecentPayments();
+    _loadDailyStats();
+    _startNotificationPolling();
+  }
+
+  Future<void> _loadDailyStats() async {
+    try {
+      final passRes = await ApiService.getDailyPassengers();
+      final colRes = await ApiService.getDailyCollected();
+      if (mounted) {
+        setState(() {
+          _dailyPassengers = (passRes['data'] as num?)?.toInt() ?? 0;
+          _dailyCollected = (colRes['data'] as num?)?.toDouble() ?? 0.0;
+          _dailyStatsError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _dailyStatsError = e.toString();
+        });
+      }
+      debugPrint('Error cargando estadísticas diarias: $e');
+    }
+  }
+
+  void _startNotificationPolling() {
+    _notificationTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
+      try {
+        final res = await ApiService.getUnreadNotifications();
+        if (res['data'] != null) {
+          List<dynamic> notifications = res['data'];
+          for (var notif in notifications) {
+            String monto = 'Notificación';
+            // Parse message optionally to get monto or just use message
+            // Wait, we need to show notification
+            showPagoOverlay(
+              context,
+              monto: notif['message'] ?? 'Pago Recibido',
+              tipo: notif['type'] ?? 'General',
+            );
+            await ApiService.markNotificationAsRead(notif['id']);
+          }
+          if (notifications.isNotEmpty && mounted) {
+            _loadRecentPayments();
+          }
+        }
+      } catch (e) {
+        // ignore errors
+      }
+    });
+  }
+
+  Future<void> _loadRecentPayments() async {
+    try {
+      final res = await ApiService.getRecentPayments();
+      if (mounted) {
+        setState(() {
+          _recentPayments = res['data'] ?? [];
+          _isLoadingPayments = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingPayments = false;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     _pingCtrl.dispose();
+    _notificationTimer?.cancel();
     super.dispose();
   }
 
@@ -136,7 +154,7 @@ class _DashboardChoferState extends State<DashboardChofer>
                     Expanded(child: _mainContent(t)),
                     SizedBox(
                       width: 400,
-                      child: _PagosPanel(t: t, pagos: _pagos),
+                      child: _PagosPanel(t: t, pagos: _recentPayments, isLoading: _isLoadingPayments),
                     ),
                   ],
                 ),
@@ -158,13 +176,17 @@ class _DashboardChoferState extends State<DashboardChofer>
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             child: Column(
               children: [
-                _StatsGrid(t: t),
+                _StatsGrid(t: t, passengers: _dailyPassengers, collected: _dailyCollected),
+                if (_dailyStatsError != null) ...[
+                  const SizedBox(height: 12),
+                  _StatsErrorMessage(error: _dailyStatsError!),
+                ],
                 const SizedBox(height: 16),
                 _MapCard(t: t),
                 const SizedBox(height: 16),
                 SizedBox(
                   height: 480,
-                  child: _PagosPanel(t: t, pagos: _pagos),
+                  child: _PagosPanel(t: t, pagos: _recentPayments, isLoading: _isLoadingPayments),
                 ),
                 // Botón Finalizar Turno (móvil)
                 const SizedBox(height: 12),
@@ -205,7 +227,11 @@ class _DashboardChoferState extends State<DashboardChofer>
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          _StatsGrid(t: t),
+          _StatsGrid(t: t, passengers: _dailyPassengers, collected: _dailyCollected),
+          if (_dailyStatsError != null) ...[
+            const SizedBox(height: 12),
+            _StatsErrorMessage(error: _dailyStatsError!),
+          ],
           const SizedBox(height: 16),
           _MapCard(t: t),
           const SizedBox(height: 16),
@@ -723,7 +749,9 @@ class _ThemeToggle extends StatelessWidget {
 // ══ Stats Grid ════════════════════════════════════════════════════════════════
 class _StatsGrid extends StatelessWidget {
   final CT t;
-  const _StatsGrid({required this.t});
+  final int passengers;
+  final double collected;
+  const _StatsGrid({required this.t, required this.passengers, required this.collected});
 
   @override
   Widget build(BuildContext context) {
@@ -734,7 +762,7 @@ class _StatsGrid extends StatelessWidget {
           _StatCard(
             t: t,
             label: 'Total Recaudado',
-            value: 'Bs 342.50',
+            value: 'Bs ${collected.toStringAsFixed(2)}',
             valueColor: t.isDark ? const Color(0xFF6FFBBE) : t.primary,
             badge: '+12% vs ayer',
             badgeColor: t.emerald,
@@ -745,7 +773,7 @@ class _StatsGrid extends StatelessWidget {
           _StatCard(
             t: t,
             label: 'Pasajeros',
-            value: '142',
+            value: passengers.toString(),
             valueColor: t.infoBlue,
             badge: 'Capacidad al 65%',
             badgeColor: t.textSecondary,
@@ -766,6 +794,28 @@ class _StatsGrid extends StatelessWidget {
           children: [cards[0], const SizedBox(height: 12), cards[1]],
         );
       },
+    );
+  }
+}
+
+class _StatsErrorMessage extends StatelessWidget {
+  final String error;
+  const _StatsErrorMessage({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Text(
+        'Error cargando métricas: $error',
+        style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+      ),
     );
   }
 }
@@ -1169,8 +1219,9 @@ class _RoutePainter extends CustomPainter {
 // ══ Panel de Pagos ═════════════════════════════════════════════════════════════
 class _PagosPanel extends StatelessWidget {
   final CT t;
-  final List<_Pago> pagos;
-  const _PagosPanel({required this.t, required this.pagos});
+  final List<dynamic> pagos;
+  final bool isLoading;
+  const _PagosPanel({required this.t, required this.pagos, required this.isLoading});
 
   @override
   Widget build(BuildContext context) {
@@ -1232,12 +1283,16 @@ class _PagosPanel extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(10),
-              itemCount: pagos.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (_, i) => _PagoTile(t: t, p: pagos[i]),
-            ),
+            child: isLoading
+                ? Center(child: CircularProgressIndicator())
+                : pagos.isEmpty
+                    ? Center(child: Text('Sin pagos recientes', style: TextStyle(color: t.textSecondary)))
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(10),
+                        itemCount: pagos.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) => _PagoTile(t: t, p: pagos[i]),
+                      ),
           ),
           AnimatedContainer(
             duration: const Duration(milliseconds: 350),
@@ -1278,11 +1333,17 @@ class _PagosPanel extends StatelessWidget {
 
 class _PagoTile extends StatelessWidget {
   final CT t;
-  final _Pago p;
+  final dynamic p;
   const _PagoTile({required this.t, required this.p});
 
   @override
   Widget build(BuildContext context) {
+    final type = p['user_type_at_time'] ?? 'General';
+    final isEstudiante = type.toLowerCase().contains('estudiante');
+    final isTercera = type.toLowerCase().contains('tercera');
+    final color = isEstudiante ? t.infoBlue : (isTercera ? t.amber : t.emerald);
+    final icon = isEstudiante ? Icons.school : (isTercera ? Icons.elderly : Icons.person);
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 350),
       padding: const EdgeInsets.all(12),
@@ -1298,10 +1359,10 @@ class _PagoTile extends StatelessWidget {
             height: 44,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: p.color.withValues(alpha: 0.1),
-              border: Border.all(color: p.color.withValues(alpha: 0.2)),
+              color: color.withValues(alpha: 0.1),
+              border: Border.all(color: color.withValues(alpha: 0.2)),
             ),
-            child: Icon(p.icon, color: p.color, size: 20),
+            child: Icon(icon, color: color, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1309,7 +1370,7 @@ class _PagoTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  p.label,
+                  'Pasajero $type',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -1318,7 +1379,7 @@ class _PagoTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  p.time,
+                  p['created_at'] != null ? p['created_at'].toString().split('T')[1].substring(0, 5) : '',
                   style: TextStyle(fontSize: 12, color: t.textSecondary),
                 ),
               ],
@@ -1328,7 +1389,7 @@ class _PagoTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                p.monto,
+                '+ Bs ${double.tryParse(p['amount_paid']?.toString() ?? '0')?.toStringAsFixed(2) ?? '0.00'}',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -1345,7 +1406,7 @@ class _PagoTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  p.tag,
+                  type,
                   style: TextStyle(
                     fontSize: 10,
                     color: t.textSecondary,

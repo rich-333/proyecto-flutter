@@ -1,9 +1,63 @@
 import 'package:flutter/material.dart';
+import '../../services/api_service.dart';
 import 'perfil_pasajero.dart';
 import 'scan_qr_pasajero.dart'; // ← Agrega esta importación
 
-class HistorialPasajero extends StatelessWidget {
+class HistorialPasajero extends StatefulWidget {
   const HistorialPasajero({super.key});
+
+  @override
+  State<HistorialPasajero> createState() => _HistorialPasajeroState();
+}
+
+class _HistorialPasajeroState extends State<HistorialPasajero> {
+  bool isLoading = true;
+  List<dynamic> combinedHistory = [];
+  double totalSpent = 0.0;
+  String currentMonth = DateTime.now().month.toString().padLeft(2, '0');
+  String currentYear = DateTime.now().year.toString();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final res = await ApiService.getPassengerHistory(currentMonth, currentYear);
+      if (mounted) {
+        setState(() {
+          final trips = (res['trips'] as List<dynamic>?)?.map((t) {
+            t['isRecarga'] = false;
+            return t;
+          }).toList() ?? [];
+          
+          final recharges = (res['recharges'] as List<dynamic>?)?.map((r) {
+            r['isRecarga'] = true;
+            return r;
+          }).toList() ?? [];
+
+          combinedHistory = [...trips, ...recharges];
+          // SORT BY DATE AND TIME
+          combinedHistory.sort((a, b) {
+            final dateA = a['date'] + " " + a['time'];
+            final dateB = b['date'] + " " + b['time'];
+            return dateB.compareTo(dateA); // Descending
+          });
+
+          totalSpent = double.tryParse(res['total_spent_in_month']?.toString() ?? '0') ?? 0.0;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,7 +147,7 @@ class HistorialPasajero extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Octubre 2023',
+                        '$currentMonth / $currentYear',
                         style: const TextStyle(
                           fontSize: 16,
                           color: Color(0xFF3C4A42), // on-surface-variant
@@ -158,9 +212,9 @@ class HistorialPasajero extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  const Text(
-                                    'Bs. 142.50',
-                                    style: TextStyle(
+                                  Text(
+                                    'Bs. ${totalSpent.toStringAsFixed(2)}',
+                                    style: const TextStyle(
                                       fontSize: 28,
                                       fontWeight: FontWeight.w700,
                                       color: Color(0xFFFFFFFF), // on-primary
@@ -196,103 +250,44 @@ class HistorialPasajero extends StatelessWidget {
                   ),
                   const SizedBox(height: 32),
                   // Transaction List
-                  // Date Group 1: Hoy
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF4FBF4).withOpacity(0.9),
-                          border: Border(
-                            bottom: BorderSide(
-                              color: const Color(0xFFDDE4DD), // surface-container-highest
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                        child: const Text(
-                          'Hoy',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF161D19),
-                          ),
-                        ),
+                  if (isLoading)
+                    const Center(child: CircularProgressIndicator())
+                  else if (combinedHistory.isEmpty)
+                    const Center(
+                      child: Text(
+                        'No hay registros este mes',
+                        style: TextStyle(color: Color(0xFF3C4A42), fontSize: 16),
                       ),
-                      const SizedBox(height: 16),
-                      // Item 1 - Pumakatari
-                      _buildHistoryItem(
-                        icon: Icons.directions_bus,
-                        title: 'Pumakatari - Chasquipampa',
-                        time: '08:30 AM',
-                        amount: '-Bs. 2.00',
-                        tag: 'General',
-                        tagColor: const Color(0xFFDAE2FD), // secondary-container
-                        tagTextColor: const Color(0xFF3F465C), // on-secondary-container
-                      ),
-                      const Divider(height: 16, thickness: 1, color: Color(0xFFDDE4DD)),
-                      // Item 2 - Mi Teleférico
-                      _buildHistoryItem(
-                        icon: Icons.tram,
-                        title: 'Mi Teleférico - Roja',
-                        time: '14:15 PM',
-                        amount: '-Bs. 3.00',
-                        tag: 'Estudiante',
-                        tagColor: const Color(0xFF10B981), // primary-container
-                        tagTextColor: const Color(0xFFFFFFFF),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-                  // Date Group 2: Ayer
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF4FBF4).withOpacity(0.9),
-                          border: Border(
-                            bottom: BorderSide(
-                              color: const Color(0xFFDDE4DD), // surface-container-highest
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                        child: const Text(
-                          'Ayer, 23 Oct',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF161D19),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Item 3 - Recarga (Top-up)
-                      _buildHistoryItem(
-                        icon: Icons.account_balance_wallet,
-                        title: 'Recarga de Saldo',
-                        subtitle: 'Tarjeta **** 4589',
-                        time: '10:00 AM',
-                        amount: '+Bs. 50.00',
-                        isTopUp: true,
-                        tag: '',
-                      ),
-                      const Divider(height: 16, thickness: 1, color: Color(0xFFDDE4DD)),
-                      // Item 4 - Pumakatari Achumani
-                      _buildHistoryItem(
-                        icon: Icons.directions_bus,
-                        title: 'Pumakatari - Achumani',
-                        time: '18:45 PM',
-                        amount: '-Bs. 2.00',
-                        tag: 'General',
-                        tagColor: const Color(0xFFDAE2FD),
-                        tagTextColor: const Color(0xFF3F465C),
-                      ),
-                    ],
-                  ),
+                    )
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: combinedHistory.length,
+                      separatorBuilder: (_, __) => const Divider(height: 16, thickness: 1, color: Color(0xFFDDE4DD)),
+                      itemBuilder: (context, index) {
+                        final tx = combinedHistory[index];
+                        final isRecarga = tx['isRecarga'] == true;
+                        
+                        String title = isRecarga ? 'Recarga de Saldo' : (tx['line'] ?? tx['route']);
+                        String sub = isRecarga ? (tx['description'] ?? 'Recarga wallet') : tx['route'];
+                        String amount = isRecarga ? '+Bs. ${tx['amount']}' : '-Bs. ${tx['amount_paid']}';
+                        String time = tx['time'].toString().substring(0, 5);
+                        String tag = tx['passenger_type'] ?? 'General';
+                        
+                        return _buildHistoryItem(
+                          icon: isRecarga ? Icons.account_balance_wallet : Icons.directions_bus,
+                          title: title,
+                          subtitle: sub,
+                          time: '${tx['date']} $time',
+                          amount: amount,
+                          isTopUp: isRecarga,
+                          tag: isRecarga ? '' : tag,
+                          tagColor: isRecarga ? Colors.transparent : const Color(0xFFDAE2FD),
+                          tagTextColor: isRecarga ? Colors.transparent : const Color(0xFF3F465C),
+                        );
+                      },
+                    ),
                   const SizedBox(height: 100), // Espacio para bottom nav
                 ],
               ),

@@ -1,8 +1,54 @@
 import 'package:flutter/material.dart';
+import '../../services/api_service.dart';
 import 'chofer_theme.dart';
 
-class ResumenJornadaChofer extends StatelessWidget {
+class ResumenJornadaChofer extends StatefulWidget {
   const ResumenJornadaChofer({super.key});
+
+  @override
+  State<ResumenJornadaChofer> createState() => _ResumenJornadaChoferState();
+}
+
+class _ResumenJornadaChoferState extends State<ResumenJornadaChofer> {
+  bool _isLoading = true;
+  int _totalPassengers = 0;
+  double _totalCollected = 0.0;
+  List<dynamic> _breakdown = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSummary();
+  }
+
+  Future<void> _loadSummary() async {
+    try {
+      final passengersRes = await ApiService.getDailyPassengers();
+      final collectedRes = await ApiService.getDailyCollected();
+      final breakdownRes = await ApiService.getBreakdown();
+
+      if (mounted) {
+        setState(() {
+          _totalPassengers = int.tryParse(passengersRes['data']?.toString() ?? '0') ?? 0;
+          _totalCollected = double.tryParse(collectedRes['data']?.toString() ?? '0') ?? 0.0;
+          _breakdown = breakdownRes['data'] ?? [];
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _logout() async {
+    await ApiService.logoutDriver();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacementNamed('/chofer/login');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +103,10 @@ class ResumenJornadaChofer extends StatelessWidget {
           const SizedBox(height: 24),
 
           // ── Stats bento ────────────────────────────────────────────────────
-          LayoutBuilder(
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator())
+          else
+            LayoutBuilder(
             builder: (_, c) {
               final two = c.maxWidth > 500;
               return Column(
@@ -70,7 +119,7 @@ class ResumenJornadaChofer extends StatelessWidget {
                         child: _HeroStatCard(
                           t: t,
                           label: 'Ingresos Totales',
-                          value: 'Bs. 485.50',
+                          value: 'Bs. ${_totalCollected.toStringAsFixed(2)}',
                           valueColor: t.emerald,
                           height: 130,
                         ),
@@ -143,35 +192,43 @@ class ResumenJornadaChofer extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          _DesgloseTile(
-            t: t,
-            icon: Icons.group,
-            iconColor: t.isDark ? const Color(0xFF4EDEA3) : t.primary,
-            label: 'General',
-            count: '142',
-            total: 'Bs. 284.00',
-            totalColor: t.isDark ? const Color(0xFF4EDEA3) : t.primary,
-          ),
-          const SizedBox(height: 10),
-          _DesgloseTile(
-            t: t,
-            icon: Icons.school,
-            iconColor: t.infoBlue,
-            label: 'Estudiante',
-            count: '85',
-            total: 'Bs. 85.00',
-            totalColor: t.infoBlue,
-          ),
-          const SizedBox(height: 10),
-          _DesgloseTile(
-            t: t,
-            icon: Icons.elderly,
-            iconColor: t.amber,
-            label: 'Tercera Edad',
-            count: '32',
-            total: 'Bs. 48.00',
-            totalColor: t.amber,
-          ),
+          if (_breakdown.isEmpty)
+            Center(
+              child: Text(
+                'Aún no hay pasajeros',
+                style: TextStyle(color: t.textSecondary),
+              ),
+            )
+          else
+            ..._breakdown.map((item) {
+              final type = item['user_type_at_time'] ?? 'General';
+              final count = item['count']?.toString() ?? '0';
+              final total = double.tryParse(item['total']?.toString() ?? '0')?.toStringAsFixed(2) ?? '0.00';
+              
+              IconData icon = Icons.group;
+              Color color = t.isDark ? const Color(0xFF4EDEA3) : t.primary;
+
+              if (type.toLowerCase().contains('estudiante')) {
+                icon = Icons.school;
+                color = t.infoBlue;
+              } else if (type.toLowerCase().contains('tercera')) {
+                icon = Icons.elderly;
+                color = t.amber;
+              }
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _DesgloseTile(
+                  t: t,
+                  icon: icon,
+                  iconColor: color,
+                  label: type,
+                  count: count,
+                  total: 'Bs. $total',
+                  totalColor: color,
+                ),
+              );
+            }),
 
           const SizedBox(height: 28),
 
@@ -182,11 +239,7 @@ class ResumenJornadaChofer extends StatelessWidget {
               final finBtn = SizedBox(
                 height: 56,
                 child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/chofer',
-                    (_) => false,
-                  ),
+                  onPressed: _logout,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: t.primary,
                     foregroundColor: Colors.white,
