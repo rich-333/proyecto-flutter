@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Passenger;
 
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\PassengerProfile;
@@ -28,7 +29,7 @@ class PassengerController extends Controller
         }
 
         return response()->json([
-            'balance' => $passengerProfile->current_balance
+            'data' => $passengerProfile->current_balance
         ]);
     }
 
@@ -45,16 +46,20 @@ class PassengerController extends Controller
         }
 
         // Obtener últimos 10 viajes
-        $trips = Trip::with(['assignment.route.line'])
+        $trips = Trip::with(['assignment.vehicle.route.line'])
             ->where('passenger_profile_id', $passenger->id)
             ->orderBy('created_at', 'desc')
             ->limit(10)
             ->get()
             ->map(function ($trip) {
+
+                $vehicle = $trip->assignment->vehicle ?? null;
+                $route = $vehicle->route ?? null;
+
                 return [
                     'type' => 'viaje',
-                    'route' => $trip->assignment->route->origin . ' - ' . $trip->assignment->route->destination,
-                    'line' => $trip->assignment->route->line->name ?? null,
+                    'route' => $route ? ($route->origin . ' - ' . $route->destination) : 'Ruta no disponible',
+                    'line' => $route->line->name ?? null,
                     'amount' => -$trip->amount_paid,
                     'user_type' => $trip->user_type_at_time,
                     'date' => $trip->created_at->format('Y-m-d'),
@@ -88,7 +93,7 @@ class PassengerController extends Controller
             ->values()
             ->take(10);
 
-        return response()->json($recent);
+        return response()->json(['data' => $recent]);
     }
 
     /**
@@ -107,7 +112,7 @@ class PassengerController extends Controller
         $month = $request->query('month', date('m'));
         $year = $request->query('year', date('Y'));
 
-        $trips = Trip::with(['assignment.route.line'])
+        $trips = Trip::with(['assignment.vehicle.route.line'])
             ->where('passenger_profile_id', $passenger->id)
             ->whereMonth('created_at', $month)
             ->whereYear('created_at', $year)
@@ -125,11 +130,15 @@ class PassengerController extends Controller
 
         $history = [
             'trips' => $trips->map(function ($trip) {
+                $assignment = $trip->assignment;
+                $vehicle = $assignment->vehicle ?? null;
+                $route = $vehicle->route ?? null;
+
                 return [
                     'date' => $trip->created_at->format('Y-m-d'),
                     'time' => $trip->created_at->format('H:i:s'),
-                    'route' => $trip->assignment->route->origin . ' - ' . $trip->assignment->route->destination,
-                    'line' => $trip->assignment->route->line->name ?? null,
+                    'route' => $route ? ($route->origin . ' - ' . $route->destination) : 'Ruta no disponible',
+                    'line' => $route->line->name ?? null,
                     'amount_paid' => $trip->amount_paid,
                     'passenger_type' => $trip->user_type_at_time,
                 ];
@@ -191,11 +200,11 @@ class PassengerController extends Controller
     private function getFareForUserType($userType)
     {
         $fares = [
-            'estudiante_escolar' => 0.50,
-            'estudiante_universitario' => 1.00,
-            'adulto_mayor' => 1.00,
-            'discapacitado' => 0.00,
-            'general' => 2.00,
+            'estudiante_escolar' => 1.00,
+            'estudiante_universitario' => 2.00,
+            'adulto_mayor' => 2.50,
+            'discapacitado' => 2.50,
+            'general' => 3.00,
         ];
 
         return $fares[$userType] ?? 2.00;

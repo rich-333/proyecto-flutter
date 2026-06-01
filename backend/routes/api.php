@@ -5,7 +5,9 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Driver\AuthController as DriverAuthController;
 use App\Http\Controllers\Passenger\AuthController as PassengerAuthController;
+use App\Http\Controllers\Passenger\PassengerController;
 use App\Http\Controllers\Driver\TripController;
+use App\Http\Controllers\Driver\NotificationController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -22,6 +24,13 @@ Route::prefix('passenger')
 Route::middleware(['auth:sanctum', 'pasajero'])
     ->prefix('passenger')
     ->group(function () {
+
+    Route::get('/balance', [PassengerController::class, 'getBalance']);
+    Route::get('/recent-activity', [PassengerController::class, 'getRecentActivity']);
+    Route::get('/history', [PassengerController::class, 'getHistory']);
+    Route::post('/recharge-balance', [PassengerController::class, 'rechargeBalance']);
+    Route::post('/preview-payment', [PassengerController::class, 'previewPayment']);
+    Route::post('/pay-trip', [PassengerController::class, 'payTrip']);
 
     Route::post('logout', [PassengerAuthController::class, 'logout']);
 });
@@ -46,6 +55,9 @@ Route::middleware(['auth:sanctum', 'conductor'])
     Route::get('/summary/breakdown', [TripController::class, 'getMoneyByTypeOfDailyPassenger']);
     
     Route::get('/payments/recent', [TripController::class, 'getRecentPayments']);
+
+    Route::get('/notifications/unread', [NotificationController::class, 'getUnread']);
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
 
     Route::post('/logout', [DriverAuthController::class, 'logout']);
 });
