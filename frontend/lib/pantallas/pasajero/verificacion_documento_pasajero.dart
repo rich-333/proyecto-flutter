@@ -1,34 +1,199 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart';
+// Avoid importing dart:io to keep web compatibility; use XFile from image_picker instead
+import '../../services/api_service.dart';
 
 class VerificacionDocumentoPasajero extends StatefulWidget {
-  final String tipoUsuario; // 'Estudiante' o 'Mayor'
+  final String tipoUsuario;
+  final String fullName;
+  final String ci;
+  final String phone;
+  final String email;
+  final String password;
+  final String birthDate;
 
   const VerificacionDocumentoPasajero({
     super.key,
     required this.tipoUsuario,
+    required this.fullName,
+    required this.ci,
+    required this.phone,
+    required this.email,
+    required this.password,
+    required this.birthDate,
   });
 
   @override
-  State<VerificacionDocumentoPasajero> createState() => _VerificacionDocumentoPasajeroState();
+  State<VerificacionDocumentoPasajero> createState() =>
+      _VerificacionDocumentoPasajeroState();
 }
 
-class _VerificacionDocumentoPasajeroState extends State<VerificacionDocumentoPasajero> {
+class _VerificacionDocumentoPasajeroState
+    extends State<VerificacionDocumentoPasajero> {
   bool isFileUploaded = false;
   String fileName = '';
-  late String currentTipo;
+  XFile? selectedFile;
+  bool isLoading = false;
 
-  @override
-  void initState() {
-    super.initState();
-    currentTipo = widget.tipoUsuario;
+  final ImagePicker _imagePicker = ImagePicker();
+
+  final Map<String, Map<String, String>> tiposDocumento = {
+    'estudiante_escolar': {
+      'titulo': 'Verificación de Estudiante Escolar',
+      'descripcion':
+          'Sube una foto de tu carnet de identidad vigente para acceder a la tarifa preferencial.',
+      'icono': 'school',
+    },
+    'estudiante_universitario': {
+      'titulo': 'Verificación de Estudiante Universitario',
+      'descripcion':
+          'Sube una foto de tu carnet universitario vigente para acceder a la tarifa preferencial.',
+      'icono': 'school_outlined',
+    },
+    'adulto_mayor': {
+      'titulo': 'Verificación de Adulto Mayor',
+      'descripcion':
+          'Sube una foto de tu carnet de identidad vigente para acceder a la tarifa preferencial.',
+      'icono': 'accessibility_new',
+    },
+    'discapacitado': {
+      'titulo': 'Verificación de Discapacitado',
+      'descripcion':
+          'Sube una foto de tu carnet de discapacitado vigente para acceder a la tarifa preferencial.',
+      'icono': 'accessibility',
+    },
+  };
+
+  Future<void> _selectImage() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        setState(() {
+          selectedFile = image;
+          isFileUploaded = true;
+          fileName = image.name;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al seleccionar imagen: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _finishRegistration() async {
+    if (!isFileUploaded || selectedFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor selecciona un documento')),
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      // If running on web, read bytes from XFile and send bytes; otherwise send path
+      if (kIsWeb) {
+        final bytes = await selectedFile!.readAsBytes();
+        final response = await ApiService.registerPassenger(
+          fullName: widget.fullName,
+          ci: widget.ci,
+          phone: widget.phone,
+          email: widget.email,
+          password: widget.password,
+          birthDate: widget.birthDate,
+          userType: widget.tipoUsuario,
+          documentImageBytes: bytes,
+        );
+
+        if (mounted) {
+          if (response['message'] != null) {
+            if (response['token'] != null) {
+              await ApiService.saveToken(response['token']);
+            }
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(response['message'])),
+            );
+
+            Navigator.pushReplacementNamed(context, '/home');
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content:
+                    Text(response['error'] ?? 'Error al registrar documento'),
+              ),
+            );
+          }
+        }
+      } else {
+        final response = await ApiService.registerPassenger(
+          fullName: widget.fullName,
+          ci: widget.ci,
+          phone: widget.phone,
+          email: widget.email,
+          password: widget.password,
+          birthDate: widget.birthDate,
+          userType: widget.tipoUsuario,
+          documentImage: selectedFile!.path,
+        );
+
+        if (mounted) {
+          if (response['message'] != null) {
+            if (response['token'] != null) {
+              await ApiService.saveToken(response['token']);
+            }
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(response['message'])),
+            );
+
+            Navigator.pushReplacementNamed(context, '/home');
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content:
+                    Text(response['error'] ?? 'Error al registrar documento'),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
+  String _getButtonText() {
+    switch (widget.tipoUsuario) {
+      case 'estudiante_escolar':
+      case 'estudiante_universitario':
+      case 'discapacitado':
+        return 'Continuar';
+      case 'adulto_mayor':
+        return 'Finalizar registro';
+      default:
+        return 'Continuar';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isEstudiante = currentTipo == 'Estudiante';
-    
+    final tipoInfo = tiposDocumento[widget.tipoUsuario] ?? tiposDocumento['general']!;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4FBF4), // background
+      backgroundColor: const Color(0xFFF4FBF4),
       body: Column(
         children: [
           // TopAppBar
@@ -40,7 +205,6 @@ class _VerificacionDocumentoPasajeroState extends State<VerificacionDocumentoPas
             ),
             child: Row(
               children: [
-                // Back button
                 GestureDetector(
                   onTap: () {
                     Navigator.pop(context);
@@ -71,6 +235,7 @@ class _VerificacionDocumentoPasajeroState extends State<VerificacionDocumentoPas
               ],
             ),
           ),
+
           // Main Content
           Expanded(
             child: SingleChildScrollView(
@@ -79,6 +244,7 @@ class _VerificacionDocumentoPasajeroState extends State<VerificacionDocumentoPas
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 24),
+
                   // Progress Indicator
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,7 +256,7 @@ class _VerificacionDocumentoPasajeroState extends State<VerificacionDocumentoPas
                             'Paso 2 de 2',
                             style: TextStyle(
                               fontSize: 12,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w600,
                               letterSpacing: 0.5,
                               color: Color(0xFF565E74),
                             ),
@@ -124,411 +290,169 @@ class _VerificacionDocumentoPasajeroState extends State<VerificacionDocumentoPas
                     ],
                   ),
                   const SizedBox(height: 24),
-                  // Toggle Scenarios
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F0E9),
-                      borderRadius: BorderRadius.circular(8),
+
+                  // Contenido dinámico
+                  Text(
+                    tipoInfo['titulo']!,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF161D19),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                currentTipo = 'Estudiante';
-                                isFileUploaded = false;
-                                fileName = '';
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isEstudiante ? Colors.white : Colors.transparent,
-                                borderRadius: BorderRadius.circular(6),
-                                boxShadow: isEstudiante
-                                    ? [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.05),
-                                          blurRadius: 4,
-                                          offset: const Offset(0, 1),
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: Text(
-                                'Estudiante',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  color: isEstudiante
-                                      ? const Color(0xFF006C49)
-                                      : const Color(0xFF3C4A42),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                currentTipo = 'Mayor';
-                                isFileUploaded = false;
-                                fileName = '';
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                color: !isEstudiante ? Colors.white : Colors.transparent,
-                                borderRadius: BorderRadius.circular(6),
-                                boxShadow: !isEstudiante
-                                    ? [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.05),
-                                          blurRadius: 4,
-                                          offset: const Offset(0, 1),
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: Text(
-                                'Adulto Mayor',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  color: !isEstudiante
-                                      ? const Color(0xFF006C49)
-                                      : const Color(0xFF3C4A42),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    tipoInfo['descripcion']!,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Color(0xFF3C4A42),
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // Contenido según el tipo
-                  if (isEstudiante) _buildStudentVerification() else _buildSeniorVerification(),
+
+                  // Upload Area
+                  GestureDetector(
+                    onTap: _selectImage,
+                    child: Container(
+                      width: double.infinity,
+                      constraints: const BoxConstraints(minHeight: 250),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEEF6EE),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFF4EDEA3),
+                          width: 2,
+                        ),
+                      ),
+                      child: selectedFile != null
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF10B981),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check_circle,
+                                    color: Colors.white,
+                                    size: 40,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Documento cargado',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF10B981),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  fileName,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.5,
+                                    color: Color(0xFF565E74),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Tocar para cambiar',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    decoration: TextDecoration.underline,
+                                    color: Color(0xFF006C49),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981)
+                                        .withOpacity(0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.cloud_upload,
+                                    color: Color(0xFF006C49),
+                                    size: 36,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Tocar para subir foto',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF006C49),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Formatos aceptados: JPG, PNG',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.5,
+                                    color: Color(0xFF565E74),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Continuar/Finalizar Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: isLoading ? null : _finishRegistration,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        disabledBackgroundColor:
+                            const Color(0xFF10B981).withOpacity(0.5),
+                      ),
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              _getButtonText(),
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildStudentVerification() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Verificación de Estudiante',
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF161D19),
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Sube una foto de tu carnet estudiantil vigente para acceder a la tarifa preferencial.',
-          style: TextStyle(
-            fontSize: 16,
-            color: Color(0xFF3C4A42),
-          ),
-        ),
-        const SizedBox(height: 24),
-        // Upload Area
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              isFileUploaded = true;
-              fileName = 'carnet_estudiante.jpg';
-            });
-          },
-          child: Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(minHeight: 250),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEEF6EE),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0xFF4EDEA3),
-                width: 2,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (!isFileUploaded) ...[
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.cloud_upload,
-                      color: Color(0xFF006C49),
-                      size: 36,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Tocar para subir foto',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF006C49),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Formatos aceptados: JPG, PNG',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.5,
-                      color: Color(0xFF565E74),
-                    ),
-                  ),
-                ] else ...[
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF10B981),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.check_circle,
-                      color: Colors.white,
-                      size: 40,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Documento cargado',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF10B981),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    fileName,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.5,
-                      color: Color(0xFF565E74),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Tocar para cambiar',
-                    style: TextStyle(
-                      fontSize: 12,
-                      decoration: TextDecoration.underline,
-                      color: Color(0xFF006C49),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        // Continuar Button
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: () {
-              // Navegar al Home
-              Navigator.pushReplacementNamed(context, '/home');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Continuar',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSeniorVerification() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Verificación de Adulto Mayor',
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF161D19),
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Sube una foto de tu carnet de identidad vigente para acceder a la tarifa preferencial.',
-          style: TextStyle(
-            fontSize: 16,
-            color: Color(0xFF3C4A42),
-          ),
-        ),
-        const SizedBox(height: 24),
-        // Upload Area
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              isFileUploaded = true;
-              fileName = 'carnet_identidad.jpg';
-            });
-          },
-          child: Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(minHeight: 250),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEEF6EE),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0xFF4EDEA3),
-                width: 2,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (!isFileUploaded) ...[
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.cloud_upload,
-                      color: Color(0xFF006C49),
-                      size: 36,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Tocar para subir foto',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF006C49),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Formatos aceptados: JPG, PNG',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.5,
-                      color: Color(0xFF565E74),
-                    ),
-                  ),
-                ] else ...[
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF10B981),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.check_circle,
-                      color: Colors.white,
-                      size: 40,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Documento cargado',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF10B981),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    fileName,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.5,
-                      color: Color(0xFF565E74),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Tocar para cambiar',
-                    style: TextStyle(
-                      fontSize: 12,
-                      decoration: TextDecoration.underline,
-                      color: Color(0xFF006C49),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        // Finalizar registro Button
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: () {
-              // Navegar al Home
-              Navigator.pushReplacementNamed(context, '/home');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Finalizar registro',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
